@@ -1,0 +1,17 @@
+---
+common_pkgs_apk:
+  install:
+    - bash
+    - openrc
+    - py3-yaml
+    - py3-cryptography
+    - openssh-client
+    - sshpass
+    - git
+    - rsync
+    - shadow
+    - musl-locales
+    - musl-locales-lang
+  remove: []
+  remove_regex: []
+  remove_modified_configs: false

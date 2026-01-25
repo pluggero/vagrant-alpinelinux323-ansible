@@ -1,0 +1,5 @@
+---
+openrc_services:
+  - name: "local"
+    runlevel: "default"
+    enabled: true

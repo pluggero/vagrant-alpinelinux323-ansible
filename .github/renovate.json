@@ -1,0 +1,82 @@
+{
+  "extends": [
+    "config:best-practices",
+    ":disableRateLimiting"
+  ],
+  "automerge": false,
+  "automergeType": "pr",
+  "packageRules": [
+    {
+      "matchManagers": ["github-actions", "pip_requirements"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "matchManagers": ["custom.regex", "ansible-galaxy"],
+      "automerge": false
+    }
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "pip_requirements",
+    "custom.regex",
+    "ansible-galaxy"
+  ],
+  "ansible-galaxy": {
+    "managerFilePatterns": [
+      "/^ansible/requirements\\.ya?ml$/"
+    ]
+  },
+  "assignees": ["pluggero"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^ansible/vars/virtualbox_guest\\.yml$/",
+        "/^.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "virtualbox_guest_virtualbox_version:\\s+\"(?<currentValue>[\\d\\.]+)\"",
+        "VBOX_GUEST_VERSION:\\s+\"(?<currentValue>[\\d\\.]+)\""
+      ],
+      "datasourceTemplate": "custom.virtualbox",
+      "depNameTemplate": "virtualbox-role",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "VBOX_VERSION:\\s+\"(?<currentValue>[\\d\\.]+)\""
+      ],
+      "datasourceTemplate": "custom.virtualbox",
+      "depNameTemplate": "virtualbox-ci",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^packer/variables.auto.pkrvars\\.hcl$/"
+      ],
+      "matchStrings": [
+        "vm_guest_os_version\\s+=\\s+\"(?<currentValue>[\\d\\.]+)\""
+      ],
+      "datasourceTemplate": "custom.alpinelinux-installer",
+      "depNameTemplate": "alpinelinux-installer",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "alpine-standard-(?<version>.+)-x86_64\\.iso"
+    }
+  ],
+  "customDatasources": {
+    "virtualbox": {
+      "defaultRegistryUrlTemplate": "https://download.virtualbox.org/virtualbox/LATEST-STABLE.TXT",
+      "format": "plain"
+    },
+    "alpinelinux-installer": {
+      "defaultRegistryUrlTemplate": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+      "format": "html"
+    }
+  }
+}

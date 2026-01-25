@@ -1,0 +1,120 @@
+---
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        description: "Whether to upload the built artifact"
+        type: boolean
+        default: false
+    outputs:
+      artifact-name:
+        description: "The name of the uploaded artifact"
+        value: vagrant-box
+
+env:
+  PACKER_OUTPUT: packer/outputs/alpinelinux323-virtualbox-amd64/alpinelinux323-virtualbox.box
+  VBOX_VERSION: "7.1.12"
+  VBOX_DEB_DISTRO: "Ubuntu"
+  VBOX_DEB_CODENAME: "noble"
+
+jobs:
+  build:
+    name: Build Vagrant Box
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: Set up Python 3
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: pip3 install -r requirements.txt
+
+      - name: Get VirtualBox build ID
+        id: get-build-id
+        run: |
+          echo "Detecting VirtualBox build ID for version ${VBOX_VERSION}..."
+          BUILD_ID=$(curl -s "https://download.virtualbox.org/virtualbox/${VBOX_VERSION}/" | \
+                    grep -oP 'virtualbox-[0-9.]+_[0-9.]+-\K[0-9]+(?=~'${VBOX_DEB_DISTRO}'~'${VBOX_DEB_CODENAME}')' | \
+                    head -1)
+
+          if [ -z "$BUILD_ID" ]; then
+            echo "Error: Could not detect build ID for VirtualBox ${VBOX_VERSION}"
+            echo "Available files:"
+            curl -s "https://download.virtualbox.org/virtualbox/${VBOX_VERSION}/" | grep -o 'virtualbox-[^"]*\.deb'
+            exit 1
+          fi
+
+          echo "Detected build ID: $BUILD_ID"
+          echo "VBOX_BUILD_ID=$BUILD_ID" >> $GITHUB_ENV
+
+      - name: Construct and validate VBOX_DEB_URL
+        run: |
+          export VBOX_BRANCH="${VBOX_VERSION%.*}"
+          export VBOX_DEB_FILE="virtualbox-${VBOX_BRANCH}_${VBOX_VERSION}-${VBOX_BUILD_ID}~${VBOX_DEB_DISTRO}~${VBOX_DEB_CODENAME}_amd64.deb"
+          export VBOX_DEB_URL="https://download.virtualbox.org/virtualbox/${VBOX_VERSION}/${VBOX_DEB_FILE}"
+          echo "Constructed URL: $VBOX_DEB_URL"
+
+          # Validate that the file exists
+          if curl --output /dev/null --silent --head --fail "$VBOX_DEB_URL"; then
+            echo "VirtualBox package file confirmed to exist"
+            echo "VBOX_DEB_URL=$VBOX_DEB_URL" >> $GITHUB_ENV
+          else
+            echo "Error: VirtualBox package file does not exist at $VBOX_DEB_URL"
+            echo "Build ID $VBOX_BUILD_ID may be incorrect for this version/platform combination"
+            exit 1
+          fi
+
+      - name: Install VirtualBox
+        run: |
+          wget -O- https://www.virtualbox.org/download/oracle_vbox_2016.asc \
+            | sudo gpg --dearmor --yes --output /usr/share/keyrings/oracle-virtualbox-2016.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/oracle-virtualbox-2016.gpg] \
+            http://download.virtualbox.org/virtualbox/debian $(lsb_release -cs) contrib" \
+            | sudo tee /etc/apt/sources.list.d/virtualbox.list
+          sudo apt update
+          sudo apt install -y linux-headers-$(uname -r) dkms
+          wget ${{ env.VBOX_DEB_URL }} -O /tmp/virtualbox.deb
+          sudo apt install -y /tmp/virtualbox.deb
+
+      - name: Verify VirtualBox installation
+        run: VBoxManage --version
+
+      - name: Ensure USER and LOGNAME environment
+        run: |
+          echo "USER=$(whoami)" >> $GITHUB_ENV
+          echo "LOGNAME=$(whoami)" >> $GITHUB_ENV
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@1aa358be5cf73883762b302a3a03abd66e75b232 # v3
+
+      - name: Verify Packer installation
+        run: packer --version
+
+      - name: Make builder script executable
+        run: chmod +x ./scripts/alpinelinux323_builder.sh
+
+      - name: Build the Vagrant box
+        run: ./scripts/alpinelinux323_builder.sh
+
+      - name: Verify box file created
+        run: |
+          if [ ! -f "${{ env.PACKER_OUTPUT }}" ]; then
+            echo "❌ Box file not found!"
+            exit 1
+          fi
+          echo "✅ Box file found: ${{ env.PACKER_OUTPUT }}"
+
+      - name: Upload box artifact
+        if: inputs.upload-artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: vagrant-box
+          path: ${{ env.PACKER_OUTPUT }}
+          retention-days: 1

@@ -1,0 +1,27 @@
+---
+- name: Alpinelinux323 provisioning
+  hosts: all
+  gather_facts: true
+
+  vars_files:
+    - ../vars/upgrade.yml
+    - ../vars/common_pkgs.yml
+    - ../vars/python.yml
+    - ../vars/user_setup.yml
+    - ../vars/openrc.yml
+    - ../vars/virtualbox_guest.yml
+
+  roles:
+    - pluggero.upgrade
+    - pluggero.common_pkgs
+    - pluggero.python
+    - pluggero.virtualbox_guest
+    - pluggero.user_setup
+
+  tasks:
+    - name: Configure OpenRC services
+      ansible.builtin.command:
+        cmd: "rc-update add {{ item.name }} {{ item.runlevel }}"
+      loop: "{{ openrc_services }}"
+      when: item.enabled | default(false)
+      changed_when: true

@@ -1,0 +1,21 @@
+---
+python_version: "3.14.2"
+python_tools:
+  - package: "ansible"
+    version: "13.1.0"
+    install_scope: "system"
+    venv_name: "ansible"
+    executables:
+      [
+        "ansible",
+        "ansible-community",
+        "ansible-config",
+        "ansible-console",
+        "ansible-doc",
+        "ansible-galaxy",
+        "ansible-inventory",
+        "ansible-playbook",
+        "ansible-pull",
+        "ansible-test",
+        "ansible-vault",
+      ]
