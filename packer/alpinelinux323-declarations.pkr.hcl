@@ -25,21 +25,21 @@ locals {
 # Non-interactive installation approach using answerfile
 local "alpinelinux_boot_command_x86_64" {
   expression = [
-    "<wait30>", # Wait for system boot
+    "<wait1.5m>", # Wait for system boot
     "root<enter><wait2>", # Login as root (no password on live ISO)
     "ip link set eth0 up<enter><wait2>", # Bring interface up to reach Packer HTTP server
     "udhcpc -i eth0<enter><wait10>", # Request new DHCP lease in Packer network
     "wget http://{{ .HTTPIP }}:{{ .HTTPPort }}/answerfile<enter><wait5>", # Download answerfile from Packer HTTP server
     "EXPECTED='${var.vm_answerfile_checksum}'; ACTUAL=$(sha256sum answerfile | awk '{print $1}'); if [ \"$EXPECTED\" = \"$ACTUAL\" ]; then echo 'Checksum verified'; else echo \"ERROR: Answerfile checksum mismatch\"; echo \"Expected: $EXPECTED\"; echo \"Actual:   $ACTUAL\"; while true; do sleep 5; done; fi<enter><wait5>", # Verify answerfile checksum, loop forever on failure to trigger timeout
-    "ERASE_DISKS=/dev/sda setup-alpine -f answerfile<enter><wait10>", # Run setup-alpine with answerfile (ERASE_DISKS suppresses confirmation)
+    "ERASE_DISKS=/dev/sda setup-alpine -f answerfile<enter><wait30>", # Run setup-alpine with answerfile (ERASE_DISKS suppresses confirmation)
     "${var.vm_ssh_password}<enter><wait2>", # Set root password (currently not supported in answerfile)
     "${var.vm_ssh_password}<enter><wait2>", # Retype password
     "<wait1m>", # Wait until installation is finished
-    "reboot<enter><wait1m>", # Reboot into installed system
+    "reboot<enter><wait1.5m>", # Reboot into installed system
     "${var.vm_ssh_username}<enter><wait2>", # Login using root user
     "${var.vm_ssh_password}<enter><wait2>",
-    "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config<enter><wait1>", # Allow root password login
-    "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config<enter><wait1>",
+    "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config<enter><wait2>", # Allow root password login
+    "echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config<enter><wait2>",
     "reboot<enter>"
   ]
 }
