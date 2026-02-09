@@ -5,8 +5,8 @@
 # Virtual Machine Settings
 vm_name                             = "alpinelinux323"
 vm_hostname                         = "alpinelinux323-ansible"
-vm_guest_os_version                 = "3.23.2"
-vm_guest_iso_checksum_x86_64        = "1b8be1ce264bf50048f2c93d8b4e72dd0f791340090aaed022b366b9a80e3518"
+vm_guest_os_version                 = "3.23.3"
+vm_guest_iso_checksum_x86_64        = "966d6bf4d4c79958d43abde84a3e5bbeb4f8c757c164a49d3ec8432be6d36f16"
 # You can get the checksum manually with this command: echo 'sha256(templatefile("http/answerfile.pkrtpl.hcl", { hostname = var.vm_hostname }))' | packer console packer/
 vm_answerfile_checksum              = "fcc5fa5c4daa6f74c19f0b52a1922bb6ee4bcddb6fd0364d43798b16c603a6dd"
 vm_boot_wait                        = "10s"
