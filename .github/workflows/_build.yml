@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: pip3 install -r requirements.txt
 
+      - name: Unload KVM kernel modules
+        run: |
+          echo "Unloading KVM kernel modules to avoid conflicts with VirtualBox..."
+          sudo modprobe -r kvm_intel kvm_amd kvm || true
+          lsmod | grep kvm || echo "KVM modules successfully unloaded"
+
       - name: Get VirtualBox build ID
         id: get-build-id
         run: |
