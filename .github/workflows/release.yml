@@ -14,7 +14,7 @@ env:
   SHORT_DESCRIPTION: alpinelinux323 Vagrant box for Ansible Role Testing.
   PROVIDER: virtualbox
   ARCHITECTURE: amd64
-  VBOX_VERSION: "7.1.12"
+  VBOX_VERSION: "7.2.6"
   VBOX_GUEST_VERSION: "7.2.6"
 
 jobs:
