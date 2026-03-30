@@ -15,7 +15,7 @@ on:
 
 env:
   PACKER_OUTPUT: packer/outputs/alpinelinux323-virtualbox-amd64/alpinelinux323-virtualbox.box
-  VBOX_VERSION: "7.1.12"
+  VBOX_VERSION: "7.2.6"
   VBOX_DEB_DISTRO: "Ubuntu"
   VBOX_DEB_CODENAME: "noble"
 
@@ -90,7 +90,9 @@ jobs:
           sudo apt install -y /tmp/virtualbox.deb
 
       - name: Verify VirtualBox installation
-        run: VBoxManage --version
+        run: |
+          VBoxManage --version
+          VBoxManage list hostinfo
 
       - name: Ensure USER and LOGNAME environment
         run: |
