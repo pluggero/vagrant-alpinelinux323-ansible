@@ -90,7 +90,9 @@ jobs:
           sudo apt install -y /tmp/virtualbox.deb
 
       - name: Verify VirtualBox installation
-        run: VBoxManage --version
+        run: |
+          VBoxManage --version
+          VBoxManage list hostinfo
 
       - name: Ensure USER and LOGNAME environment
         run: |
