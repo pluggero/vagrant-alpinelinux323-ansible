@@ -278,8 +278,5 @@ jobs:
     needs: release
     permissions:
       contents: write
-    secrets:
-      GH_APP_ID: ${{ secrets.GH_APP_ID }}
-      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
     with:
       version: ${{ needs.release.outputs.version }}
