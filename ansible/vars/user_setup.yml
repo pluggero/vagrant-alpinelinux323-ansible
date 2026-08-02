@@ -13,7 +13,8 @@ user_setup_users:
     create_home: true
     groups: []
     groups_append: true
-    password: "{{ user_setup_password_vagrant | password_hash('sha512', user_setup_password_salt_vagrant) }}"
+    password: "{{ user_setup_password_vagrant }}"
+    password_salt: "{{ user_setup_password_salt_vagrant }}"
     sudo_access: true
     sudo_nopasswd: true
     env_var_setup: false
@@ -33,7 +34,8 @@ user_setup_users:
     create_home: true
     groups: []
     groups_append: true
-    password: "{{ user_setup_password_ansible | password_hash('sha512', user_setup_password_salt_ansible) }}"
+    password: "{{ user_setup_password_ansible }}"
+    password_salt: "{{ user_setup_password_salt_ansible }}"
     sudo_access: true
     sudo_nopasswd: false
     env_var_setup: false
