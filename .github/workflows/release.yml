@@ -15,7 +15,7 @@ env:
   PROVIDER: virtualbox
   ARCHITECTURE: amd64
   VBOX_VERSION: "7.2.14"
-  VBOX_GUEST_VERSION: "7.2.14"
+  VBOX_GUEST_VERSION: "7.2.16"
 
 jobs:
   lint:
