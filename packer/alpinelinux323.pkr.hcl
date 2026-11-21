@@ -61,13 +61,10 @@ build {
     roles_path           = "${path.root}/../ansible/roles"
     playbook_file        = "${path.root}/../ansible/playbooks/main.yml"
     user                 = "${var.vm_ssh_username}"
-    ansible_env_vars = [ 
-      # To enable piplining, you have to edit sudoers file
-      # See:https://docs.ansible.com/ansible/latest/reference_appendices/config.html#ansible-pipelining
-      # "ANSIBLE_PIPELINING=true",
-      "ANSIBLE_ROLES_PATH=${path.root}/../ansible/roles",
+    ansible_env_vars = [
+      # Pins ansible.cfg, which now owns roles_path/host_key_checking/callbacks.
+      "ANSIBLE_CONFIG=${path.root}/../ansible/ansible.cfg",
       "ANSIBLE_FORCE_COLOR=true",
-      "ANSIBLE_HOST_KEY_CHECKING=false",
     ]
     extra_arguments = [
       "--extra-vars",

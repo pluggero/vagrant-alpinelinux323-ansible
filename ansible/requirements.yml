@@ -1,4 +1,7 @@
 ---
+collections:
+  - name: ansible.posix
+
 roles:
   - src: pluggero.upgrade
     version: 1.6.0
