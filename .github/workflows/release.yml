@@ -31,7 +31,7 @@ jobs:
 
   release:
     name: Release to HashiCorp Cloud
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: build
     permissions:
       id-token: write
