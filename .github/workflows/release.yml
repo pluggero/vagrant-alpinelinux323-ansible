@@ -9,9 +9,7 @@ on:
 
 env:
   PACKER_OUTPUT: packer/outputs/alpinelinux323-virtualbox-amd64/alpinelinux323-virtualbox.box
-  REGISTRY: pluggero
   BOX_NAME: alpinelinux323-ansible
-  SHORT_DESCRIPTION: alpinelinux323 Vagrant box for Ansible Role Testing.
   PROVIDER: virtualbox
   ARCHITECTURE: amd64
   VBOX_VERSION: "7.2.22"
@@ -30,7 +28,7 @@ jobs:
       upload-artifact: true
 
   release:
-    name: Release to HashiCorp Cloud
+    name: Release to Hetzner Object Storage
     runs-on: ubuntu-26.04
     needs: build
     permissions:
@@ -57,127 +55,41 @@ jobs:
           VERSION=$(date -u +"%Y.%m.%d")
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Set tag message
-        id: tag_message
-        run: |
-          VERSION="${{ steps.set_version.outputs.version }}"
-          TAG_MESSAGE="Weekly build ${VERSION}"
-          echo "tag_message<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAG_MESSAGE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Get commit SHA and workflow URL
         id: build_metadata
         run: |
           echo "commit_sha=${GITHUB_SHA}" >> $GITHUB_OUTPUT
           echo "workflow_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> $GITHUB_OUTPUT
 
-      - name: Authenticate to HCP
-        id: hcp_auth
-        run: |
-          set -euo pipefail
-
-          echo "Authenticating to HashiCorp Cloud Platform (HCP)..."
-
-          response=$(curl --silent --location "https://auth.idp.hashicorp.com/oauth2/token" \
-            --header "Content-Type: application/x-www-form-urlencoded" \
-            --data-urlencode "client_id=${{ secrets.HCP_CLIENT_ID }}" \
-            --data-urlencode "client_secret=${{ secrets.HCP_CLIENT_SECRET }}" \
-            --data-urlencode "grant_type=client_credentials" \
-            --data-urlencode "audience=https://api.cloud.hashicorp.com")
-
-          token=$(echo "$response" | jq -r .access_token)
-
-          if [[ -z "$token" || "$token" == "null" ]]; then
-            echo "Error: Failed to retrieve access token from HCP authentication response."
-            exit 1
-          fi
-
-          echo "::add-mask::$token"
-          echo "token=$token" >> $GITHUB_OUTPUT
-
-          echo "Authentication successful."
-
       - name: Prepare box upload
         id: prepare_box
+        env:
+          HETZNER_S3_BUCKET: ${{ vars.HETZNER_S3_BUCKET }}
+          HETZNER_S3_ENDPOINT: ${{ vars.HETZNER_S3_ENDPOINT }}
         run: |
           set -euo pipefail
+          source scripts/box_catalog.sh
 
-          ACCESS_TOKEN="${{ steps.hcp_auth.outputs.token }}"
           BOX_NAME="${{ env.BOX_NAME }}"
           VERSION="${{ steps.set_version.outputs.version }}"
           PROVIDER="${{ env.PROVIDER }}"
           ARCHITECTURE="${{ env.ARCHITECTURE }}"
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          CATALOG_URL="${HETZNER_S3_ENDPOINT}/${HETZNER_S3_BUCKET}/${BOX_NAME}/metadata.json"
 
-          echo "Starting box preparation..."
+          echo "Fetching existing catalog for '$BOX_NAME'..."
+          catalog=$(fetch_catalog "$BOX_NAME" "$REPO_URL" "$CATALOG_URL")
 
-          echo "Checking if box '$BOX_NAME' exists..."
-
-          response=$(curl --silent --header "Authorization: Bearer $ACCESS_TOKEN" \
-              --url "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}")
-
-          if echo "$response" | grep -q '"code":5'; then
-            echo "Box does not exist. Creating box '$BOX_NAME'..."
-            curl --silent --fail --request POST --header "Authorization: Bearer $ACCESS_TOKEN" \
-              --header "Content-Type: application/json" \
-              --data '{"name":"'"$BOX_NAME"'","description":"'"$REPO_URL"'","short_description":"'"$SHORT_DESCRIPTION"'","is_private":false}' \
-              "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/boxes" | jq .
-            echo "Box created."
+          if [[ "$(provider_exists "$catalog" "$VERSION" "$PROVIDER" "$ARCHITECTURE")" == "true" ]]; then
+            echo "Version already exists."
+            echo "skip_upload=true" >> $GITHUB_OUTPUT
           else
-            echo "Box already exists."
-          fi
+            echo "Version does not exist. Preparing version '$VERSION'..."
 
-          echo
-          echo "Checking if version '$VERSION' exists for box '$BOX_NAME'..."
-
-          version_response=$(curl --silent \
-              --url "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/version/${VERSION}/provider/${PROVIDER}/architecture/${ARCHITECTURE}/download")
-
-          if echo "$version_response" | grep -q '"code":5'; then
-            echo "Version does not exist. Creating version '$VERSION'..."
-
-            # Construct description with build metadata
-            DESCRIPTION="${{ steps.tag_message.outputs.tag_message }}
-
-          Build Information
-          - VirtualBox version: ${VBOX_VERSION}
-          - VirtualBox Guest Additions version: ${VBOX_GUEST_VERSION}
-          - Git commit: ${{ steps.build_metadata.outputs.commit_sha }}
-          - Build workflow: ${{ steps.build_metadata.outputs.workflow_url }}
-
-          To verify provenance: https://github.com/${{ github.repository }}#verifying-box-provenance"
-
-            curl --silent --fail --request POST --header "Authorization: Bearer $ACCESS_TOKEN" \
-              --header "Content-Type: application/json" \
-              --data "$(jq -n \
-                --arg name "$VERSION" \
-                --arg desc "$DESCRIPTION" \
-                --arg provider "$PROVIDER" \
-                '{name: $name, description: $desc, provider_names: [$provider]}')" \
-              "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/versions" | jq .
-            echo "Version created."
-
-            echo
-            echo "Creating provider '$PROVIDER'..."
-            curl --silent --fail --request POST --header "Authorization: Bearer $ACCESS_TOKEN" \
-              --url "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/version/${VERSION}/providers" \
-              --header "Content-Type: application/json" \
-              --data '{
-                "name": "'"$PROVIDER"'",
-                "summary": {
-                  "architectures_count": 1
-                },
-                "architecture_types": ["'"$ARCHITECTURE"'"]
-              }' | jq .
-            echo "Provider created."
-
-            echo
             echo "Calculating box checksum..."
             checksum=$(sha256sum ./box/alpinelinux323-virtualbox.box | awk '{print $1}')
             echo "Checksum: $checksum"
 
-            echo
             echo "Creating checksums file with metadata..."
             {
               echo "$checksum  alpinelinux323-virtualbox.box"
@@ -190,32 +102,12 @@ jobs:
               echo "- VirtualBox version: $VBOX_VERSION"
               echo "- VirtualBox Guest Additions version: $VBOX_GUEST_VERSION"
               echo ""
-              echo "Repository: ${{ github.server_url }}/${{ github.repository }}"
+              echo "Repository: $REPO_URL"
             } > ./box/checksums.txt
             echo "Checksums file created."
 
-            echo
-            echo "Creating architecture '$ARCHITECTURE'..."
-            curl --silent --fail --request POST --header "Authorization: Bearer $ACCESS_TOKEN" \
-              --url "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/version/${VERSION}/provider/${PROVIDER}/architectures" \
-              --header "Content-Type: application/json" \
-              --data '{
-                "architecture_type": "'"$ARCHITECTURE"'",
-                "default": true,
-                "box_data": {
-                  "checksum": "'"$checksum"'",
-                  "checksum_type": "SHA256",
-                  "size": "'$(stat --format="%s" ./box/alpinelinux323-virtualbox.box)'",
-                  "created_at": "'"$(date --utc +"%Y-%m-%dT%H:%M:%SZ")"'",
-                  "updated_at": "'"$(date --utc +"%Y-%m-%dT%H:%M:%SZ")"'"
-                }
-              }' | jq .
-            echo "Architecture created."
-
+            echo "$checksum" > /tmp/checksum.txt
             echo "skip_upload=false" >> $GITHUB_OUTPUT
-          else
-            echo "Version already exists."
-            echo "skip_upload=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Attest checksums file
@@ -233,43 +125,49 @@ jobs:
 
       - name: Upload box
         if: steps.prepare_box.outputs.skip_upload == 'false'
+        env:
+          HETZNER_S3_BUCKET: ${{ vars.HETZNER_S3_BUCKET }}
+          HETZNER_S3_ENDPOINT: ${{ vars.HETZNER_S3_ENDPOINT }}
+          # aws CLI only reads creds from these exact env var names.
+          AWS_ACCESS_KEY_ID: ${{ secrets.HETZNER_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.HETZNER_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
         run: |
           set -euo pipefail
+          source scripts/box_catalog.sh
 
-          ACCESS_TOKEN="${{ steps.hcp_auth.outputs.token }}"
           BOX_NAME="${{ env.BOX_NAME }}"
           VERSION="${{ steps.set_version.outputs.version }}"
           PROVIDER="${{ env.PROVIDER }}"
           ARCHITECTURE="${{ env.ARCHITECTURE }}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          CATALOG_URL="${HETZNER_S3_ENDPOINT}/${HETZNER_S3_BUCKET}/${BOX_NAME}/metadata.json"
+          BOX_S3_KEY="${BOX_NAME}/${VERSION}/${PROVIDER}/${ARCHITECTURE}/alpinelinux323-virtualbox.box"
+          BOX_URL="${HETZNER_S3_ENDPOINT}/${HETZNER_S3_BUCKET}/${BOX_S3_KEY}"
+          checksum=$(cat /tmp/checksum.txt)
 
           echo "Starting upload of box '$BOX_NAME' version '$VERSION'..."
 
-          echo
-          echo "Fetching upload URL..."
-          response=$(curl --silent --header "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/version/${VERSION}/provider/${PROVIDER}/architecture/${ARCHITECTURE}/upload")
-
-          upload_url=$(echo "$response" | jq -r .url)
-
-          if [[ -z "$upload_url" || "$upload_url" == "null" ]]; then
-            echo "Error: Failed to retrieve upload URL."
-            exit 1
-          fi
-
-          echo "Upload URL retrieved."
-
-          echo
           echo "Uploading box file..."
-          curl --fail --request PUT --upload-file ./box/alpinelinux323-virtualbox.box "$upload_url"
+          aws s3 cp --endpoint-url "$HETZNER_S3_ENDPOINT" \
+            ./box/alpinelinux323-virtualbox.box "s3://${HETZNER_S3_BUCKET}/${BOX_S3_KEY}"
           echo "Box upload completed."
 
-          echo
-          echo "Finalizing release..."
-          curl --silent --fail --request PUT \
-            --header "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://api.cloud.hashicorp.com/vagrant/2022-09-30/registry/${REGISTRY}/box/${BOX_NAME}/version/${VERSION}/release"
+          echo "Updating catalog..."
+          catalog=$(fetch_catalog "$BOX_NAME" "$REPO_URL" "$CATALOG_URL")
+          provider_json=$(jq -n \
+            --arg provider "$PROVIDER" \
+            --arg url "$BOX_URL" \
+            --arg checksum "$checksum" \
+            --arg arch "$ARCHITECTURE" \
+            '{name: $provider, url: $url, checksum: $checksum, checksum_type: "sha256", architecture: $arch, default_architecture: true}')
+          updated_catalog=$(merge_provider "$catalog" "$VERSION" "$provider_json")
+          echo "$updated_catalog" | jq empty
+          echo "$updated_catalog" > /tmp/catalog.json
 
-          echo
+          aws s3 cp --endpoint-url "$HETZNER_S3_ENDPOINT" --content-type application/json \
+            /tmp/catalog.json "s3://${HETZNER_S3_BUCKET}/${BOX_NAME}/metadata.json"
+
           echo "Box version released successfully!"
 
   tag:
